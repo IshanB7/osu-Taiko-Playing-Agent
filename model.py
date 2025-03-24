@@ -12,8 +12,14 @@ class OsuTaikoGenerator(tf.keras.utils.Sequence):
         self.dataset_filepath = dataset_filepath
         self.batch_size = batch_size
 
-        image_paths = [os.path.join(dataset_filepath, f"image_{i}.png") for i in use_rows]
-        labels = np.loadtxt(labels_filepath)
+        self.labels = np.loadtxt('labels.txt', dtype='str')
+
+        labels = []
+        image_paths = []
+
+        for i in use_rows:
+            image_paths.append(os.path.join(dataset_filepath, f"image_{i}.png"))
+            labels.append(self.labels[i])
 
         self.image_paths = np.array(image_paths)
 
@@ -74,19 +80,23 @@ def OsuTaikoModel(dataset_filepath, labels_filepath, balance=True):
     model = tf.keras.Sequential([
         tf.keras.Input(shape=(16, 16, 3)),
 
-        tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu', padding='same'),
-        tf.keras.layers.AvgPool2D((2, 2), padding='same'),
+        tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu'),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.MaxPooling2D((2, 2), padding='same'),
         tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu'),
-        tf.keras.layers.AvgPool2D((2, 2), padding='same'),
+        tf.keras.layers.BatchNormalization(),
+        tf.keras.layers.MaxPooling2D((2, 2), padding='same'),
 
         tf.keras.layers.Flatten(),
         tf.keras.layers.Dense(32, activation='relu'),
+        tf.keras.layers.Dropout(0.3),
         tf.keras.layers.Dense(16, activation='relu'),
+        tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(3, activation='softmax')
     ])
 
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-    model.fit(train_gen, epochs=50, verbose=1)
+    model.fit(train_gen, epochs=20, verbose=1)
 
     return model
 
