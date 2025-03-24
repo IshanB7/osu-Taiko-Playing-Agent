@@ -1,0 +1,10 @@
+docs
+docs/*
+
+images
+images/*
+
+labels.txt
+osu_agent.keras
+
+.DS_Store
