@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from sklearn.preprocessing import LabelEncoder
+from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 import os
 
@@ -107,8 +108,14 @@ def OsuTaikoModel(dataset_filepath, labels_filepath, oversample=True, undersampl
         tf.keras.layers.Dense(3, activation='softmax')
     ])
 
-    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
-    model.fit(train_gen, epochs=200, verbose=1)
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+
+    callbacks = [
+        tf.keras.callbacks.EarlyStopping(patience=15, restore_best_weights=True),
+        tf.keras.callbacks.ReduceLROnPlateau(patience=5, factor=0.2)
+    ]
+
+    model.fit(train_gen, epochs=200, verbose=1, callbacks=callbacks)
 
     return model
 
