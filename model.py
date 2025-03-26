@@ -53,13 +53,13 @@ class OsuTaikoGenerator(tf.keras.utils.Sequence):
     def shuffle(self):
         self.indices = np.random.permutation(self.indices)
 
-def OsuTaikoModel(dataset_filepath, labels_filepath, balance=True):
+def OsuTaikoModel(dataset_filepath, labels_filepath, oversample=True, undersample=False):
 
     all_idx = np.arange(len(os.listdir(dataset_filepath)))
 
     labels = np.loadtxt('labels.txt', dtype='str')
 
-    if balance:
+    if oversample:
         unique_labels, counts = np.unique(labels, return_counts=True)
         max_count = max(counts)
         balanced_indices = []
@@ -74,31 +74,43 @@ def OsuTaikoModel(dataset_filepath, labels_filepath, balance=True):
 
             balanced_indices.extend(np.random.choice(class_indices, max_count - (repeat_factor * class_size), replace=False))
             all_idx = np.array(balanced_indices)
+    elif undersample:
+        unique_labels, counts = np.unique(labels, return_counts=True)
+        min_count = min(counts)
+        balanced_indices = []
+
+        for label in unique_labels:
+            class_indices = np.where(labels == label)[0]
+            balanced_indices.extend(np.random.choice(class_indices, min_count, replace=False))
+
+        all_idx = np.array(balanced_indices)
 
     train_gen = OsuTaikoGenerator(dataset_filepath, labels_filepath, all_idx, 32)
 
     model = tf.keras.Sequential([
         tf.keras.Input(shape=(16, 16, 3)),
 
-        tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu'),
+        tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu', padding='same'),
         tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.MaxPooling2D((2, 2), padding='same'),
-        tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu'),
+        tf.keras.layers.AvgPool2D((2, 2), padding='same'),
+
+        tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu', padding='same'),
         tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.MaxPooling2D((2, 2), padding='same'),
+        tf.keras.layers.AvgPool2D((2, 2), padding='same'),
 
         tf.keras.layers.Flatten(),
-        tf.keras.layers.Dense(32, activation='relu'),
+        tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dropout(0.3),
-        tf.keras.layers.Dense(16, activation='relu'),
+
+        tf.keras.layers.Dense(32, activation='relu'),
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(3, activation='softmax')
     ])
 
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
-    model.fit(train_gen, epochs=20, verbose=1)
+    model.compile(optimizer='adam', loss='binary_crossentropy', metrics=['accuracy'])
+    model.fit(train_gen, epochs=200, verbose=1)
 
     return model
 
-model = OsuTaikoModel('./images', './labels.txt')
+model = OsuTaikoModel('./images', './labels.txt', oversample=False, undersample=True)
 model.save('osu_agent.keras')
