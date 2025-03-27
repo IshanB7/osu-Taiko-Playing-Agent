@@ -1,29 +1,17 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from sklearn.preprocessing import LabelEncoder
-from sklearn.utils.class_weight import compute_class_weight
 import numpy as np
 import os
 
 class OsuTaikoGenerator(tf.keras.utils.Sequence):
 
-    def __init__(self, dataset_filepath, labels_filepath, use_rows, batch_size, **kwargs):
+    def __init__(self, image_paths, labels, batch_size, **kwargs):
         super().__init__(**kwargs)
 
-        self.dataset_filepath = dataset_filepath
         self.batch_size = batch_size
 
-        self.labels = np.loadtxt('labels.txt', dtype='str')
-
-        labels = []
-        image_paths = []
-
-        for i in use_rows:
-            image_paths.append(os.path.join(dataset_filepath, f"image_{i}.png"))
-            labels.append(self.labels[i])
-
-        self.image_paths = np.array(image_paths)
-
+        self.image_paths = image_paths
         num_labels = LabelEncoder().fit_transform(labels)
         self.labels = tf.keras.utils.to_categorical(num_labels, num_classes=3)
 
@@ -41,6 +29,8 @@ class OsuTaikoGenerator(tf.keras.utils.Sequence):
         for path in batch_paths:
             img = load_img(path, color_mode='rgb')
             img_array = img_to_array(img) / 255.0
+
+            img_array = np.round(img_array)
             batch_images.append(img_array)
 
         x = np.array(batch_images)
@@ -54,39 +44,47 @@ class OsuTaikoGenerator(tf.keras.utils.Sequence):
     def shuffle(self):
         self.indices = np.random.permutation(self.indices)
 
-def OsuTaikoModel(dataset_filepath, labels_filepath, oversample=True, undersample=False):
+def get_indices(dataset_filepath, num_train):
+    dir_songs = sorted(os.listdir(dataset_filepath))
+    
+    if not dir_songs:
+        exit("Dataset is empty")
 
-    all_idx = np.arange(len(os.listdir(dataset_filepath)))
+    song_dirs = dir_songs[:len(dir_songs)//2]
+    # selected_songs = np.random.choice(song_dirs, num_train, replace=False)
+    selected_songs = ['1']
 
-    labels = np.loadtxt('labels.txt', dtype='str')
+    all_labels = []
+    all_image_paths = []
 
-    if oversample:
-        unique_labels, counts = np.unique(labels, return_counts=True)
-        max_count = max(counts)
-        balanced_indices = []
+    for song_id in selected_songs:
+        labels_path = os.path.join(dataset_filepath, f"labels_{song_id}.txt")
+        images_path = os.path.join(dataset_filepath, song_id)
 
-        for label in unique_labels:
-            class_indices = np.where(labels == label)[0]
-            class_size = len(class_indices)
+        labels = np.loadtxt(labels_path, dtype='str')
 
-            repeat_factor = max_count // class_size
-            for _ in range(repeat_factor):
-                balanced_indices.extend(np.random.choice(class_indices, class_size, replace=False))
+        image_paths = [os.path.join(images_path, f"image_{i}.png") for i in range(len(labels))]
 
-            balanced_indices.extend(np.random.choice(class_indices, max_count - (repeat_factor * class_size), replace=False))
-            all_idx = np.array(balanced_indices)
-    elif undersample:
-        unique_labels, counts = np.unique(labels, return_counts=True)
-        min_count = min(counts)
-        balanced_indices = []
+        all_labels.append(labels)
+        all_image_paths.extend(image_paths)
 
-        for label in unique_labels:
-            class_indices = np.where(labels == label)[0]
-            balanced_indices.extend(np.random.choice(class_indices, min_count, replace=False))
+    all_image_paths = np.array(all_image_paths)
+    all_labels = np.concatenate(all_labels)
 
-        all_idx = np.array(balanced_indices)
+    unique_labels, counts = np.unique(all_labels, return_counts=True)
+    min_count = min(counts)
+    balanced_indices = []
 
-    train_gen = OsuTaikoGenerator(dataset_filepath, labels_filepath, all_idx, 32)
+    for label in unique_labels:
+        class_indices = np.where(all_labels == label)[0]
+        balanced_indices.extend(np.random.choice(class_indices, min_count, replace=False))
+
+    return all_image_paths[balanced_indices], all_labels[balanced_indices], selected_songs
+
+def OsuTaikoModel(dataset_filepath, num_train):
+
+    image_paths, labels, selected_songs = get_indices(dataset_filepath, num_train)
+    train_gen = OsuTaikoGenerator(image_paths, labels, 32)
 
     model = tf.keras.Sequential([
         tf.keras.Input(shape=(16, 16, 3)),
@@ -111,13 +109,14 @@ def OsuTaikoModel(dataset_filepath, labels_filepath, oversample=True, undersampl
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
     callbacks = [
-        tf.keras.callbacks.EarlyStopping(patience=15, restore_best_weights=True),
-        tf.keras.callbacks.ReduceLROnPlateau(patience=5, factor=0.2)
+        tf.keras.callbacks.EarlyStopping(monitor='loss', patience=1000, restore_best_weights=True),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor='loss', patience=50, factor=0.2)
     ]
 
-    model.fit(train_gen, epochs=200, verbose=1, callbacks=callbacks)
+    model.fit(train_gen, epochs=1000, verbose=1, callbacks=callbacks)
+    print(f"Trained on {selected_songs}")
 
     return model
 
-model = OsuTaikoModel('./images', './labels.txt', oversample=False, undersample=True)
+model = OsuTaikoModel('./songs', 2)
 model.save('osu_agent.keras')
