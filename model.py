@@ -1,6 +1,7 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
 import numpy as np
 import os
 
@@ -44,7 +45,7 @@ class OsuTaikoGenerator(tf.keras.utils.Sequence):
     def shuffle(self):
         self.indices = np.random.permutation(self.indices)
 
-def get_indices(dataset_filepath, num_train):
+def get_indices(dataset_filepath, num_train, oversample):
     dir_songs = sorted(os.listdir(dataset_filepath))
     
     if not dir_songs:
@@ -72,26 +73,53 @@ def get_indices(dataset_filepath, num_train):
     all_labels = np.concatenate(all_labels)
 
     unique_labels, counts = np.unique(all_labels, return_counts=True)
-    min_count = min(counts)
     balanced_indices = []
 
-    for label in unique_labels:
-        class_indices = np.where(all_labels == label)[0]
-        balanced_indices.extend(np.random.choice(class_indices, min_count, replace=False))
+    if oversample:
+        max_count = max(counts)
+
+        for label in unique_labels:
+            class_indices = np.where(all_labels == label)[0]
+            class_size = len(class_indices)
+
+            repeat_factor = max_count // class_size
+            for _ in range(repeat_factor):
+                balanced_indices.extend(np.random.choice(class_indices, class_size, replace=False))
+
+            balanced_indices.extend(np.random.choice(class_indices, max_count - (repeat_factor * class_size), replace=False))
+            
+    else:
+        min_count = min(counts)
+
+        for label in unique_labels:
+            class_indices = np.where(all_labels == label)[0]
+            balanced_indices.extend(np.random.choice(class_indices, min_count, replace=False))
 
     return all_image_paths[balanced_indices], all_labels[balanced_indices], selected_songs
 
+###################################################################################################
+###################################################################################################
+###################################################################################################
+###################################################################################################
+###################################################################################################
+
 def OsuTaikoModel(dataset_filepath, num_train):
 
-    image_paths, labels, selected_songs = get_indices(dataset_filepath, num_train)
-    train_gen = OsuTaikoGenerator(image_paths, labels, 32)
+    image_paths, labels, selected_songs = get_indices(dataset_filepath, num_train, oversample=True)
+
+    all_idx = np.arange(len(labels))
+    train_idx, val_idx = train_test_split(all_idx, test_size=0.2)
+
+    batch_size = 32
+    train_gen = OsuTaikoGenerator(image_paths[train_idx], labels[train_idx], batch_size)
+    val_gen = OsuTaikoGenerator(image_paths[val_idx], labels[val_idx], batch_size)
 
     model = tf.keras.Sequential([
         tf.keras.Input(shape=(16, 16, 3)),
 
         tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu', padding='same'),
         tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.AvgPool2D((2, 2), padding='same'),
+        # tf.keras.layers.AvgPool2D((2, 2), padding='same'),
 
         tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu', padding='same'),
         tf.keras.layers.BatchNormalization(),
@@ -109,11 +137,11 @@ def OsuTaikoModel(dataset_filepath, num_train):
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
     callbacks = [
-        tf.keras.callbacks.EarlyStopping(monitor='loss', patience=1000, restore_best_weights=True),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor='loss', patience=50, factor=0.2)
+        tf.keras.callbacks.EarlyStopping(patience=1000, restore_best_weights=True),
+        tf.keras.callbacks.ReduceLROnPlateau(patience=5, factor=0.2)
     ]
 
-    model.fit(train_gen, epochs=1000, verbose=1, callbacks=callbacks)
+    model.fit(train_gen, validation_data=val_gen, epochs=1000, verbose=1, callbacks=callbacks)
     print(f"Trained on {selected_songs}")
 
     return model
