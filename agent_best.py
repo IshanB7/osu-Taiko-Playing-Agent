@@ -5,6 +5,7 @@ import numpy as np
 import mss
 import time
 from pynput import keyboard
+pydirectinput.PAUSE = 0.1 
 
 # model = load_model('osu_agent.keras')
 ACTIONS = ['', 'k', 'j']
