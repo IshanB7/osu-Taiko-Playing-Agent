@@ -5,12 +5,23 @@ from tensorflow.keras.models import load_model
 import mss
 import cv2
 import pyautogui
+import time
 
 model = load_model('osu_agent.keras')
 ACTIONS = ['', 'k', 'j']
 region = {'top': 252, 'left': 207, 'width': 235, 'height': 235}
 
+interval = 1 / 30.
+next_frame_time = time.time()
+
 while True:
+
+    now = time.time()
+    sleep_time = next_frame_time - now
+    if sleep_time > 0:
+        time.sleep(sleep_time)
+    next_frame_time += interval
+
     with mss.mss() as sct:
         img = sct.grab(region)
         img = np.array(img)
@@ -18,8 +29,7 @@ while True:
     image = cv2.resize(img[:, :, :3], (16, 16))
 
     img_array = image / 255.0
-    img_array = np.round(img_array)
-
     input_img = np.expand_dims(img_array, axis=0)
     press = np.argmax(model(input_img)[0])
-    pyautogui.press(ACTIONS[press])
+    pyautogui.press(ACTIONS[press], _pause=False)
+    # pyautogui.press(ACTIONS[press])
