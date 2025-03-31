@@ -8,7 +8,9 @@ import os
 # start: 415, 505
 # width, height: 2880 - 415 = 2465, 975 - 505 = 470
 
-region = {'top': 252, 'left': 207, 'width': 235, 'height': 235}
+region = {'top': 450, 'left': 340, 'width': 280, 'height': 280}  # Screenshot region
+
+os.makedirs('images', exist_ok=True)
 counter = len(os.listdir('images'))
 counter_lock = threading.Lock()
 
