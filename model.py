@@ -82,23 +82,29 @@ def get_indices(dataset_filepath, num_train, oversample):
     balanced_indices = []
 
     if oversample:
+        # size of majority class
         max_count = max(counts)
 
         for label in unique_labels:
+            # the indices of all samples that belong to the current label
             class_indices = np.where(all_labels == label)[0]
             class_size = len(class_indices)
 
             repeat_factor = max_count // class_size
             for _ in range(repeat_factor):
+                # class size numble of indices added to the balanced indices
                 balanced_indices.extend(np.random.choice(class_indices, class_size, replace=False))
-
+            # make sure that the number of indices added is equal to the max count
             balanced_indices.extend(np.random.choice(class_indices, max_count - (repeat_factor * class_size), replace=False))
             
     else:
+        # find the minimum class size
         min_count = min(counts)
 
         for label in unique_labels:
+            # the indices of all samples that belong to the current label
             class_indices = np.where(all_labels == label)[0]
+            # only select a random sample of the minimum class size
             balanced_indices.extend(np.random.choice(class_indices, min_count, replace=False))
 
     return all_image_paths[balanced_indices], all_labels[balanced_indices], selected_songs
@@ -139,7 +145,9 @@ def OsuTaikoModel(dataset_filepath, num_train):
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
 
     callbacks = [
+        # stop training when loss doesn't improve in 1000 epochs and restore best weights
         tf.keras.callbacks.EarlyStopping(monitor='loss', patience=1000, restore_best_weights=True),
+        # reduce learning rate when loss plateaus in 50 epochs
         tf.keras.callbacks.ReduceLROnPlateau(monitor='loss', patience=50, factor=0.2)
     ]
 
@@ -148,5 +156,5 @@ def OsuTaikoModel(dataset_filepath, num_train):
 
     return model
 
-model = OsuTaikoModel('./songs', 1)
+model = OsuTaikoModel('./songs', 2)
 model.save('osu_agent.keras')
