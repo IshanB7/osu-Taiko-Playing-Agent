@@ -148,5 +148,5 @@ def OsuTaikoModel(dataset_filepath, num_train):
 
     return model
 
-model = OsuTaikoModel('./songs', 2)
+model = OsuTaikoModel('./songs', 1)
 model.save('osu_agent.keras')

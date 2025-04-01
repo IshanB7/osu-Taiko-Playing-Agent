@@ -4,11 +4,12 @@ from tensorflow.keras.models import load_model
 
 import mss
 import cv2
-import pyautogui
+import pydirectinput
 
+# pydirectinput.PAUSE = 0 
 model = load_model('osu_agent.keras')
 ACTIONS = ['', 'k', 'j']
-region = {'top': 252, 'left': 207, 'width': 235, 'height': 235}
+region = {'top': 450, 'left': 340, 'width': 280, 'height': 280}  # Screenshot region
 
 while True:
     with mss.mss() as sct:
@@ -22,4 +23,4 @@ while True:
 
     input_img = np.expand_dims(img_array, axis=0)
     press = np.argmax(model(input_img)[0])
-    pyautogui.press(ACTIONS[press])
+    pydirectinput.press(ACTIONS[press])
