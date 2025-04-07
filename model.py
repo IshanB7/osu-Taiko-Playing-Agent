@@ -1,9 +1,9 @@
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import load_img, img_to_array
 from sklearn.preprocessing import LabelEncoder
-from sklearn.model_selection import train_test_split
 import numpy as np
 import os
+import sys
 
 class OsuTaikoGenerator(tf.keras.utils.Sequence):
 
@@ -30,8 +30,6 @@ class OsuTaikoGenerator(tf.keras.utils.Sequence):
         for path in batch_paths:
             img = load_img(path, color_mode='rgb')
             img_array = img_to_array(img) / 255.0
-
-            # img_array = np.round(img_array)
             batch_images.append(img_array)
 
         x = np.array(batch_images)
@@ -58,8 +56,11 @@ def get_indices(dataset_filepath, num_train, oversample):
         exit("Dataset is empty")
 
     song_dirs = dir_songs[:len(dir_songs)//2]
+
+    if len(song_dirs) < num_train:
+        exit("Not enough songs to train on")
+
     selected_songs = sorted(np.random.choice(song_dirs, num_train, replace=False))
-    # selected_songs = ['1']
 
     all_labels = []
     all_image_paths = []
@@ -112,41 +113,46 @@ def get_indices(dataset_filepath, num_train, oversample):
 def OsuTaikoModel(dataset_filepath, num_train):
 
     image_paths, labels, selected_songs = get_indices(dataset_filepath, num_train, oversample=False)
-
-    batch_size = 32
-    train_gen = OsuTaikoGenerator(image_paths, labels, batch_size)
+    train_gen = OsuTaikoGenerator(image_paths, labels, 32)
 
     model = tf.keras.Sequential([
         tf.keras.Input(shape=(16, 16, 3)),
 
         tf.keras.layers.Conv2D(filters=32, kernel_size=3, activation='relu', padding='same'),
         tf.keras.layers.BatchNormalization(),
-        # tf.keras.layers.AvgPool2D((2, 2), padding='same'),
 
         tf.keras.layers.Conv2D(filters=64, kernel_size=3, activation='relu', padding='same'),
         tf.keras.layers.BatchNormalization(),
-        tf.keras.layers.AvgPool2D((2, 2), padding='same'),
+        tf.keras.layers.AvgPool2D((2, 2)),
 
-        tf.keras.layers.Flatten(),
+        tf.keras.layers.GlobalAveragePooling2D(),
         tf.keras.layers.Dense(64, activation='relu'),
         tf.keras.layers.Dropout(0.3),
-
         tf.keras.layers.Dense(32, activation='relu'),
         tf.keras.layers.Dropout(0.2),
         tf.keras.layers.Dense(3, activation='softmax')
     ])
 
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    model.compile(
+        optimizer='adam', 
+        loss='categorical_crossentropy',
+        metrics=['accuracy']
+    )
 
     callbacks = [
-        tf.keras.callbacks.EarlyStopping(monitor='loss', patience=1000, restore_best_weights=True),
-        tf.keras.callbacks.ReduceLROnPlateau(monitor='loss', patience=50, factor=0.2)
+        tf.keras.callbacks.EarlyStopping(monitor='loss', patience=150, restore_best_weights=True, verbose=1),
+        tf.keras.callbacks.ReduceLROnPlateau(monitor='loss', patience=20, factor=0.7)
     ]
 
-    model.fit(train_gen, epochs=1000, verbose=1, callbacks=callbacks)
+    model.fit(train_gen, epochs=2000, verbose=1, callbacks=callbacks)
     print(f"Trained on {selected_songs}")
 
     return model
 
-model = OsuTaikoModel('./songs', 2)
-model.save('osu_agent.keras')
+if __name__ == "__main__":
+    if (len(sys.argv) < 2):
+        exit("Usage: python3 model.py num_songs_train")
+
+    model = OsuTaikoModel('./songs', int(sys.argv[1]))
+    model.save('osu_agent.keras')
+    
