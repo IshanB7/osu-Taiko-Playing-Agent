@@ -1,23 +1,39 @@
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.models import load_model
+from pynput import keyboard
 
 import mss
 import cv2
 import pyautogui
 import time
 
-model = load_model('osu_agent.keras')
+# model = load_model('osu_agent.keras')
+model = load_model('best_agent.keras')
+
 ACTIONS = ['', 'k', 'j']
 region = {'top': 252, 'left': 207, 'width': 235, 'height': 235}
 
 interval = 1 / 30.
 next_frame_time = time.time()
 
-while True:
+capture = False
+def on_press(key):
+    pass
 
-    now = time.time()
-    sleep_time = next_frame_time - now
+def on_release(key):
+    global capture
+    if key == keyboard.Key.enter:
+        capture = not capture
+
+listener = keyboard.Listener(on_press=on_press, on_release=on_release)
+listener.start()
+
+while not capture:
+    time.sleep(0.1)
+
+while capture:
+    sleep_time = next_frame_time - time.time()
     if sleep_time > 0:
         time.sleep(sleep_time)
     next_frame_time += interval
